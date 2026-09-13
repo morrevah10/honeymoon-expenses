@@ -1,9 +1,11 @@
 // Service worker: makes the app usable with no network connection.
-// App shell and CDN libraries are cached. Live data (Firestore, Auth,
-// exchange rates) is never cached here - Firestore keeps its own offline
-// cache, and rate lookups are stored in Firestore by the app itself.
+//
+// Our own files are always fetched from the network first, bypassing the
+// browser HTTP cache, so a redeploy shows up on the next launch. The cached
+// copy is only used when the network is unavailable. Versioned CDN libraries
+// are cached permanently since their URLs never change content.
 
-const CACHE = 'honeymoon-expenses-v1';
+const CACHE = 'honeymoon-expenses-v2';
 
 const SHELL = [
   './',
@@ -14,7 +16,6 @@ const SHELL = [
   './icons/icon-512.png'
 ];
 
-// Hosts whose responses are safe to cache forever (versioned library files).
 const CACHEABLE_HOSTS = [
   'unpkg.com',
   'www.gstatic.com',
@@ -22,7 +23,6 @@ const CACHEABLE_HOSTS = [
   'fonts.gstatic.com'
 ];
 
-// Hosts that must always go to the network.
 const NETWORK_ONLY_HOSTS = [
   'firestore.googleapis.com',
   'identitytoolkit.googleapis.com',
@@ -43,9 +43,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(
-        keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))
-      ))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -63,27 +61,33 @@ self.addEventListener('fetch', (event) => {
 
   if (NETWORK_ONLY_HOSTS.some((h) => url.hostname.endsWith(h))) return;
 
-  const sameOrigin = url.origin === self.location.origin;
-  const cacheableCdn = CACHEABLE_HOSTS.some((h) => url.hostname === h || url.hostname.endsWith('.' + h));
-
-  if (!sameOrigin && !cacheableCdn) return;
-
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      const network = fetch(req)
+  // Our own files: always ask the network, ignoring any stale HTTP-cached copy.
+  if (url.origin === self.location.origin) {
+    event.respondWith(
+      fetch(url.href, { cache: 'reload' })
         .then((res) => {
-          if (res && (res.ok || res.type === 'opaque')) {
+          if (res && res.ok) {
             const copy = res.clone();
             caches.open(CACHE).then((cache) => cache.put(req, copy)).catch(() => {});
           }
           return res;
         })
-        .catch(() => cached);
+        .catch(() => caches.match(req).then((cached) => cached || caches.match('./index.html')))
+    );
+    return;
+  }
 
-      // Cache first for libraries, network-with-fallback for the app shell so
-      // a redeploy is picked up as soon as there is a connection.
-      if (cacheableCdn && cached) return cached;
-      return cached ? network.then((r) => r || cached).catch(() => cached) : network;
-    })
+  // Versioned library files: serve from cache once we have them.
+  const cacheable = CACHEABLE_HOSTS.some((h) => url.hostname === h || url.hostname.endsWith('.' + h));
+  if (!cacheable) return;
+
+  event.respondWith(
+    caches.match(req).then((cached) => cached || fetch(req).then((res) => {
+      if (res && (res.ok || res.type === 'opaque')) {
+        const copy = res.clone();
+        caches.open(CACHE).then((cache) => cache.put(req, copy)).catch(() => {});
+      }
+      return res;
+    }))
   );
 });
