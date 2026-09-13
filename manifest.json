@@ -1,0 +1,33 @@
+{
+  "name": "הוצאות ירח דבש",
+  "short_name": "הוצאות",
+  "description": "מעקב הוצאות יומי לטיול, עם המרה לשקלים לפי שער היום",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EAEEEA",
+  "theme_color": "#0F5C52",
+  "lang": "he",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
